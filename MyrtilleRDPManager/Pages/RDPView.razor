@@ -1,5 +1,110 @@
-﻿<h3>RDPView</h3>
+﻿@page "/connect/{Id:int}"
+
+@using MyrtilleRDPManager.Data
+@using MyrtilleRDPManager.Services
+@inject AppDbContext DbContext
+@inject EncryptionService EncryptionService
+@inject NavigationManager NavManager
+
+<style>
+    .rdp-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9999; /* Menülerin üstünde kalsın */
+        background-color: #000;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .rdp-toolbar {
+        height: 40px;
+        background: #333;
+        color: white;
+        display: flex;
+        align-items: center;
+        padding: 0 1rem;
+        justify-content: space-between;
+    }
+
+    iframe {
+        flex-grow: 1;
+        border: none;
+        width: 100%;
+        height: calc(100vh - 40px);
+    }
+</style>
+
+@if (isLoading)
+{
+    <div class="alert alert-info m-4">Bağlantı bilgileri hazırlanıyor...</div>
+}
+else if (connection == null)
+{
+    <div class="alert alert-danger m-4">Bağlantı bulunamadı!</div>
+    <button class="btn btn-primary m-4" @onclick="GoBack">Geri Dön</button>
+}
+else
+{
+    <div class="rdp-container">
+        <div class="rdp-toolbar">
+            <span>Bağlı: <strong>@connection.Name</strong> (@connection.Host)</span>
+            <button class="btn btn-sm btn-danger" @onclick="GoBack">Bağlantıyı Kes</button>
+        </div>
+
+        <iframe src="@myrtilleUrl" allowfullscreen></iframe>
+    </div>
+}
 
 @code {
+    [Parameter]
+    public int Id { get; set; }
 
+    private Connection? connection;
+    private string myrtilleUrl = "";
+    private bool isLoading = true;
+
+    // KENDİ MYRTILLE ADRESİNİ BURAYA YAZ (Sonunda slash / olmasın)
+    private const string MyrtilleBaseUrl = "http://localhost/Myrtille";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            connection = await DbContext.Connections.FindAsync(Id);
+
+            if (connection != null)
+            {
+                // 1. Şifreyi Çöz
+                string clearPassword = EncryptionService.Decrypt(connection.EncryptedPassword);
+
+                // 2. Myrtille URL'ini Oluştur
+                // Myrtille varsayılan olarak şu parametreleri kabul eder:
+                // server, domain (opsiyonel), user, password, connect=Connect
+
+                // Not: Güvenlik açısından URL'de şifre taşımak best practice değildir ama
+                // şu an öğrenme aşamasında olduğun için en basit yöntem bu.
+                // Daha sonra bunu Hash/Token yapısına çevireceğiz.
+
+                myrtilleUrl = $"{MyrtilleBaseUrl}/?server={connection.Host}&user={connection.RemoteUsername}&password={System.Web.HttpUtility.UrlEncode(clearPassword)}&connect=Connect";
+
+                // Ekstra parametreler (width, height vb. eklenebilir)
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Hata: " + ex.Message);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        NavManager.NavigateTo("/admin/connections");
+    }
 }

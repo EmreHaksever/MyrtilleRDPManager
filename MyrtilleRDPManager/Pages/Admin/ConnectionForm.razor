@@ -27,15 +27,15 @@
                 }
 
                 <div class="mb-3">
-                    <label class="form-label">Bağlantı Adı</label>
-                    <InputText class="form-control" @bind-Value="connection.Name" placeholder="Örn: Muhasebe PC" />
+                    <label class="form-label">Bağlantı Adı (Örn: Muhasebe PC)</label>
+                    <InputText class="form-control" @bind-Value="connection.Name" placeholder="Sunucu için bir isim verin" />
                     <ValidationMessage For="@(() => connection.Name)" />
                 </div>
 
                 <div class="row">
                     <div class="col-md-8 mb-3">
-                        <label class="form-label">Host (IP veya Domain)</label>
-                        <InputText class="form-control" @bind-Value="connection.Host" placeholder="192.168.1.50" />
+                        <label class="form-label">Host (IP Adresi veya Domain)</label>
+                        <InputText class="form-control" @bind-Value="connection.Host" placeholder="192.168.1.X veya server.local" />
                         <ValidationMessage For="@(() => connection.Host)" />
                     </div>
                     <div class="col-md-4 mb-3">
@@ -54,7 +54,7 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Kullanıcı Adı</label>
+                        <label class="form-label">Kullanıcı Adı (Remote User)</label>
                         <InputText class="form-control" @bind-Value="connection.RemoteUsername" />
                         <ValidationMessage For="@(() => connection.RemoteUsername)" />
                     </div>
@@ -62,11 +62,10 @@
                         <label class="form-label">Şifre</label>
                         <input type="password" class="form-control @(passwordInvalid ? "is-invalid" : "")"
                                @bind="plainPassword"
-                               placeholder="@(Id > 0 ? "Değişmeyecekse boş bırak" : "Zorunlu")" />
-
+                               placeholder="@(Id > 0 ? "Değiştirmek istemiyorsanız boş bırakın" : "Zorunlu")" />
                         @if (passwordInvalid)
                         {
-                            <div class="invalid-feedback">Yeni bağlantı için şifre girmek zorundasın!</div>
+                            <div class="invalid-feedback">Yeni bağlantı oluştururken şifre zorunludur.</div>
                         }
                     </div>
                 </div>
@@ -86,14 +85,14 @@
     [Parameter]
     public int Id { get; set; }
 
+    // DÜZELTME: 'required' alanları burada boş string ile başlatmak ZORUNDASIN.
+    // Yoksa "Unassigned variable" hatası alırsın.
     private Connection connection = new Connection
     {
         Name = "",
         Host = "",
         RemoteUsername = "",
-        EncryptedPassword = "", // Başlangıç değeri
-        Protocol = "rdp",
-        Port = 3389
+        EncryptedPassword = "" // Başlangıçta boş, Submit anında dolacak.
     };
 
     private string plainPassword = "";
@@ -102,17 +101,21 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Varsayılanlar
+        connection.Port = 3389;
+        connection.Protocol = "rdp";
+
         if (Id > 0)
         {
             var existing = await DbContext.Connections.FindAsync(Id);
             if (existing != null)
             {
                 connection = existing;
-                // Şifreyi çözüp ekrana basmıyoruz. Güvenlik kuralı.
+                // Mevcut şifreyi asla geri çözüp göstermiyoruz (Güvenlik Kuralı #1).
             }
             else
             {
-                errorMessage = "Kayıt bulunamadı. Lütfen geri dönün.";
+                errorMessage = "Kayıt bulunamadı.";
             }
         }
     }
@@ -122,18 +125,21 @@
         errorMessage = null;
         passwordInvalid = false;
 
-        // Validasyon: Yeni kayıtsa şifre boş olamaz
-        if (Id == 0 && string.IsNullOrWhiteSpace(plainPassword))
+        // 1. Şifre Validasyonu (Modelde olmadığı için manuel yapıyoruz)
+        if (Id == 0 && string.IsNullOrEmpty(plainPassword))
         {
             passwordInvalid = true;
-            return;
+            return; // İşlemi durdur
         }
 
-        // Şifre girilmişse şifrele ve modele yaz
-        if (!string.IsNullOrWhiteSpace(plainPassword))
+        // 2. Şifreleme İşlemi
+        if (!string.IsNullOrEmpty(plainPassword))
         {
             connection.EncryptedPassword = EncryptionService.Encrypt(plainPassword);
         }
+
+        // DİKKAT: Düzenleme modunda şifre boş bırakıldıysa,
+        // connection.EncryptedPassword zaten veritabanındaki eski değeri taşıyor. Dokunmuyoruz.
 
         try
         {
@@ -151,8 +157,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Bir hata oluştu: {ex.Message}";
-            // Gerçek hayatta bunu loglamalısın, ekrana basmamalısın.
+            errorMessage = $"Veritabanı hatası: {ex.Message}";
         }
     }
 }

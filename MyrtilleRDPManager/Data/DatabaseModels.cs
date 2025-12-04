@@ -9,17 +9,18 @@ namespace MyrtilleRDPManager.Data
         [Key]
         public int Id { get; set; }
 
+        // DÜZELTME: 'required' eklendi. Artık bu nesne oluşturulurken Username verilmek ZORUNDA.
         [Required]
-        public string Username { get; set; }
+        public required string Username { get; set; }
 
         [Required]
-        public string PasswordHash { get; set; }
+        public required string PasswordHash { get; set; }
 
         public bool IsAdmin { get; set; } = false;
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-        // EKSİK OLAN KISIM: İlişkiler
+        // İlişkiler
         public virtual ICollection<UserConnectionPermission> Permissions { get; set; } = new List<UserConnectionPermission>();
     }
 
@@ -30,26 +31,28 @@ namespace MyrtilleRDPManager.Data
         public int Id { get; set; }
 
         [Required]
-        public string Name { get; set; }
+        public required string Name { get; set; }
 
         [Required]
-        public string Host { get; set; }
+        public required string Host { get; set; }
 
+        // Varsayılan değerlerin var, bunlar sorun çıkarmaz.
         public string Protocol { get; set; } = "rdp";
         public int Port { get; set; } = 3389;
 
-        public string RemoteUsername { get; set; }
+        // DÜZELTME: Bu alanlar null olamaz diye tanımlanmış, o yüzden 'required' şart.
+        // Eğer boş kalabilirlerse 'string?' yapmalıydın. Ama RDP için bunlar lazım.
+        public required string RemoteUsername { get; set; }
 
-        [Required]
-        public string EncryptedPassword { get; set; }
+        public required string EncryptedPassword { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-        // EKSİK OLAN KISIM: İlişkiler
+        // İlişkiler
         public virtual ICollection<UserConnectionPermission> Permissions { get; set; } = new List<UserConnectionPermission>();
     }
 
-    // 3. YETKİ TABLOSU (İŞTE EKSİK OLAN SINIF BU)
+    // 3. YETKİ TABLOSU
     public class UserConnectionPermission
     {
         [Key]
@@ -57,12 +60,17 @@ namespace MyrtilleRDPManager.Data
 
         // Hangi Kullanıcı?
         public int UserId { get; set; }
+
         [ForeignKey("UserId")]
-        public virtual User User { get; set; }
+        // DÜZELTME: "= null!;" eklendi. 
+        // Bu, derleyiciye "Bunun null olmayacağına söz veriyorum (çünkü EF Core dolduracak), kapa çeneni" demektir.
+        public virtual User User { get; set; } = null!;
 
         // Hangi Bilgisayar?
         public int ConnectionId { get; set; }
+
         [ForeignKey("ConnectionId")]
-        public virtual Connection Connection { get; set; }
+        // Aynı şekilde burada da null-forgiving operator (!) kullanıyoruz.
+        public virtual Connection Connection { get; set; } = null!;
     }
 }

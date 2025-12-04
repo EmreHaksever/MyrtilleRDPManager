@@ -30,5 +30,42 @@
     </div>
 
     <script src="_framework/blazor.server.js"></script>
+    <script src="js/myrtille/display.js"></script>
+    <script src="js/myrtille/network.js"></script>
+    <script src="js/myrtille/user.js"></script>
+    <script src="js/myrtille/myrtille.js"></script>
+
+    <script>
+        window.startMyrtille = function (displayId, gatewayUrl, serverAddress, username, password) {
+            console.log("Myrtille başlatılıyor... Hedef: " + serverAddress);
+
+            var config = {
+                httpServerUrl: gatewayUrl,
+                stateless: false,
+                wsEnabled: true
+            };
+
+            var dialog = null;
+            var display = new Myrtille.Display(config, dialog, displayId);
+            var network = new Myrtille.Network(config, dialog, display);
+            var user = new Myrtille.User(config, dialog, display, network);
+            var myrtille = new Myrtille.Myrtille(config, dialog, display, network, user);
+
+            myrtille.init();
+
+            // Bağlantı isteğini gönder
+            network.send(
+                network.getXmlHttpUrl() +
+                "&command=RemoteSession" +
+                "&serverAddress=" + encodeURIComponent(serverAddress) +
+                "&userName=" + encodeURIComponent(username) +
+                "&userPassword=" + encodeURIComponent(password) +
+                "&width=" + display.getBrowserWidth() +
+                "&height=" + display.getBrowserHeight() +
+                "&connect=1"
+            );
+        };
+    </script>
 </body>
+
 </html>
