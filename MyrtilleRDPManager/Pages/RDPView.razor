@@ -7,66 +7,82 @@
 @inject NavigationManager NavManager
 
 <style>
+    body, html {
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+    }
+
     .rdp-container {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
-        z-index: 9999; /* Menülerin üstünde kalsın */
+        z-index: 9999;
         background-color: #000;
         display: flex;
         flex-direction: column;
     }
 
     .rdp-toolbar {
-        height: 40px;
-        background: #333;
-        color: white;
+        height: 34px;
+        background: #222;
+        color: #ccc;
         display: flex;
         align-items: center;
         padding: 0 1rem;
         justify-content: space-between;
+        font-size: 0.9rem;
+        border-bottom: 1px solid #444;
     }
 
     iframe {
         flex-grow: 1;
         border: none;
         width: 100%;
-        height: calc(100vh - 40px);
+        height: calc(100vh - 34px);
     }
 </style>
 
 @if (isLoading)
 {
-    <div class="alert alert-info m-4">Bağlantı bilgileri hazırlanıyor...</div>
+    <div class="d-flex justify-content-center align-items-center vh-100">
+        <div class="spinner-border text-primary" role="status"></div>
+        <h4 class="ms-3">Bağlantı kuruluyor...</h4>
+    </div>
 }
 else if (connection == null)
 {
-    <div class="alert alert-danger m-4">Bağlantı bulunamadı!</div>
-    <button class="btn btn-primary m-4" @onclick="GoBack">Geri Dön</button>
+    <div class="alert alert-danger m-4">
+        <strong>Hata:</strong> İstenen bağlantı veritabanında bulunamadı.
+    </div>
+    <button class="btn btn-secondary m-4" @onclick="GoBack">Listeye Dön</button>
 }
 else
 {
     <div class="rdp-container">
         <div class="rdp-toolbar">
-            <span>Bağlı: <strong>@connection.Name</strong> (@connection.Host)</span>
+            <span>
+                <span class="oi oi-monitor me-2" style="color: limegreen;"></span>
+                Bağlı: <strong>@connection.Name</strong> (@connection.Host)
+            </span>
             <button class="btn btn-sm btn-danger" @onclick="GoBack">Bağlantıyı Kes</button>
         </div>
 
-        <iframe src="@myrtilleUrl" allowfullscreen></iframe>
+        <iframe src="@myrtilleUrl" allow="clipboard-read; clipboard-write" allowfullscreen></iframe>
     </div>
 }
 
 @code {
-    [Parameter]
-    public int Id { get; set; }
+    [Parameter] public int Id { get; set; }
 
     private Connection? connection;
     private string myrtilleUrl = "";
     private bool isLoading = true;
 
-    // KENDİ MYRTILLE ADRESİNİ BURAYA YAZ (Sonunda slash / olmasın)
+    // DİKKAT: Sonunda eğik çizgi (slash) olmasın
     private const string MyrtilleBaseUrl = "http://localhost/Myrtille";
 
     protected override async Task OnInitializedAsync()
@@ -80,22 +96,23 @@ else
                 // 1. Şifreyi Çöz
                 string clearPassword = EncryptionService.Decrypt(connection.EncryptedPassword);
 
-                // 2. Myrtille URL'ini Oluştur
-                // Myrtille varsayılan olarak şu parametreleri kabul eder:
-                // server, domain (opsiyonel), user, password, connect=Connect
+                // 2. Parametreleri URL uyumlu hale getir (Encode)
+                var host = Uri.EscapeDataString(connection.Host);
+                var user = Uri.EscapeDataString(connection.RemoteUsername);
+                var pass = Uri.EscapeDataString(clearPassword); // Şifredeki özel karakterler (%) bozulmasın diye
 
-                // Not: Güvenlik açısından URL'de şifre taşımak best practice değildir ama
-                // şu an öğrenme aşamasında olduğun için en basit yöntem bu.
-                // Daha sonra bunu Hash/Token yapısına çevireceğiz.
+                // 3. URL'i İnşa Et
+                // Default.aspx sayfası zorunludur, yoksa parametreler kaybolabilir.
+                // connect=Connect%21  (%21 ünlem işaretidir, Myrtille bunu bekler)
 
-                myrtilleUrl = $"{MyrtilleBaseUrl}/?server={connection.Host}&user={connection.RemoteUsername}&password={System.Web.HttpUtility.UrlEncode(clearPassword)}&connect=Connect";
+                myrtilleUrl = $"{MyrtilleBaseUrl}/Default.aspx?server={host}&user={user}&password={pass}&connect=Connect%21";
 
-                // Ekstra parametreler (width, height vb. eklenebilir)
+                Console.WriteLine("Generated URL: " + myrtilleUrl); // Debug için konsola basar
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Hata: " + ex.Message);
+            Console.WriteLine("Hata oluştu: " + ex.Message);
         }
         finally
         {

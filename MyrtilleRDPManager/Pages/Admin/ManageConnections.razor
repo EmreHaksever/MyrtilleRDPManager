@@ -1,158 +1,100 @@
-﻿@page "/admin/connections/new"
-@page "/admin/connections/edit/{Id:int}"
-
-@using MyrtilleRDPManager.Data
-@using MyrtilleRDPManager.Services
+﻿@page "/admin/connections"
 @using Microsoft.EntityFrameworkCore
-
+@using MyrtilleRDPManager.Data
 @inject AppDbContext DbContext
 @inject NavigationManager NavManager
-@inject EncryptionService EncryptionService
+@inject IJSRuntime JS
 
-<div class="container mt-4">
-    <div class="card shadow-sm">
-        <div class="card-header bg-primary text-white">
-            <h3 class="card-title mb-0">
-                @(Id == 0 ? "Yeni Sunucu Ekle" : "Sunucuyu Düzenle")
-            </h3>
-        </div>
-        <div class="card-body">
-            <EditForm Model="@connection" OnValidSubmit="HandleValidSubmit">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
-
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="alert alert-danger">@errorMessage</div>
-                }
-
-                <div class="mb-3">
-                    <label class="form-label">Bağlantı Adı</label>
-                    <InputText class="form-control" @bind-Value="connection.Name" placeholder="Örn: Muhasebe PC" />
-                    <ValidationMessage For="@(() => connection.Name)" />
-                </div>
-
-                <div class="row">
-                    <div class="col-md-8 mb-3">
-                        <label class="form-label">Host (IP veya Domain)</label>
-                        <InputText class="form-control" @bind-Value="connection.Host" placeholder="192.168.1.50" />
-                        <ValidationMessage For="@(() => connection.Host)" />
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">Port</label>
-                        <InputNumber class="form-control" @bind-Value="connection.Port" />
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Protokol</label>
-                    <InputSelect class="form-select" @bind-Value="connection.Protocol">
-                        <option value="rdp">RDP (Uzak Masaüstü)</option>
-                        <option value="ssh">SSH (Terminal)</option>
-                    </InputSelect>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Kullanıcı Adı</label>
-                        <InputText class="form-control" @bind-Value="connection.RemoteUsername" />
-                        <ValidationMessage For="@(() => connection.RemoteUsername)" />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Şifre</label>
-                        <input type="password" class="form-control @(passwordInvalid ? "is-invalid" : "")"
-                               @bind="plainPassword"
-                               placeholder="@(Id > 0 ? "Değişmeyecekse boş bırak" : "Zorunlu")" />
-
-                        @if (passwordInvalid)
-                        {
-                            <div class="invalid-feedback">Yeni bağlantı için şifre girmek zorundasın!</div>
-                        }
-                    </div>
-                </div>
-
-                <div class="d-flex justify-content-end gap-2">
-                    <a href="/admin/connections" class="btn btn-secondary">İptal</a>
-                    <button type="submit" class="btn btn-success">
-                        <span class="oi oi-check"></span> Kaydet
-                    </button>
-                </div>
-            </EditForm>
-        </div>
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Sunucu Listesi</h2>
+        <button class="btn btn-primary" @onclick="CreateNew">
+            <span class="oi oi-plus"></span> Yeni Sunucu Ekle
+        </button>
     </div>
+
+    @if (connections == null)
+    {
+        <div class="d-flex justify-content-center">
+            <div class="spinner-border text-primary" role="status"></div>
+            <span class="ms-2">Yükleniyor...</span>
+        </div>
+    }
+    else if (connections.Count == 0)
+    {
+        <div class="alert alert-warning">
+            Hiç kayıt bulunamadı. Yeni bir sunucu ekleyerek başlayın.
+        </div>
+    }
+    else
+    {
+        <table class="table table-hover table-bordered align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Ad</th>
+                    <th>Host (IP/DNS)</th>
+                    <th>Kullanıcı</th>
+                    <th>Protokol</th>
+                    <th style="width: 180px;" class="text-end">İşlemler</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in connections)
+                {
+                    <tr>
+                        <td class="fw-bold">@item.Name</td>
+                        <td>@item.Host</td>
+                        <td>@item.RemoteUsername</td>
+                        <td><span class="badge bg-secondary">@item.Protocol</span></td>
+                        <td class="text-end">
+                            <a href="connect/@item.Id" class="btn btn-sm btn-success me-1" title="Bağlan">
+                                <span class="oi oi-monitor"></span>
+                            </a>
+                            <button class="btn btn-sm btn-warning me-1" @onclick="() => Edit(item.Id)" title="Düzenle">
+                                <span class="oi oi-pencil"></span>
+                            </button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => Delete(item)" title="Sil">
+                                <span class="oi oi-trash"></span>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 </div>
 
 @code {
-    [Parameter]
-    public int Id { get; set; }
-
-    private Connection connection = new Connection
-    {
-        Name = "",
-        Host = "",
-        RemoteUsername = "",
-        EncryptedPassword = "", // Başlangıç değeri
-        Protocol = "rdp",
-        Port = 3389
-    };
-
-    private string plainPassword = "";
-    private string? errorMessage;
-    private bool passwordInvalid = false;
+    private List<Connection>? connections;
 
     protected override async Task OnInitializedAsync()
     {
-        if (Id > 0)
-        {
-            var existing = await DbContext.Connections.FindAsync(Id);
-            if (existing != null)
-            {
-                connection = existing;
-                // Şifreyi çözüp ekrana basmıyoruz. Güvenlik kuralı.
-            }
-            else
-            {
-                errorMessage = "Kayıt bulunamadı. Lütfen geri dönün.";
-            }
-        }
+        await LoadData();
     }
 
-    private async Task HandleValidSubmit()
+    private async Task LoadData()
     {
-        errorMessage = null;
-        passwordInvalid = false;
+        // Veritabanından listeyi çekiyoruz
+        connections = await DbContext.Connections.AsNoTracking().ToListAsync();
+    }
 
-        // Validasyon: Yeni kayıtsa şifre boş olamaz
-        if (Id == 0 && string.IsNullOrWhiteSpace(plainPassword))
-        {
-            passwordInvalid = true;
+    private void CreateNew()
+    {
+        NavManager.NavigateTo("/admin/connections/new");
+    }
+
+    private void Edit(int id)
+    {
+        NavManager.NavigateTo($"/admin/connections/edit/{id}");
+    }
+
+    private async Task Delete(Connection item)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"'{item.Name}' kaydını silmek istediğine emin misin?"))
             return;
-        }
 
-        // Şifre girilmişse şifrele ve modele yaz
-        if (!string.IsNullOrWhiteSpace(plainPassword))
-        {
-            connection.EncryptedPassword = EncryptionService.Encrypt(plainPassword);
-        }
-
-        try
-        {
-            if (Id == 0)
-            {
-                DbContext.Connections.Add(connection);
-            }
-            else
-            {
-                DbContext.Connections.Update(connection);
-            }
-
-            await DbContext.SaveChangesAsync();
-            NavManager.NavigateTo("/admin/connections");
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Bir hata oluştu: {ex.Message}";
-            // Gerçek hayatta bunu loglamalısın, ekrana basmamalısın.
-        }
+        DbContext.Connections.Remove(item);
+        await DbContext.SaveChangesAsync();
+        await LoadData(); // Listeyi yenile
     }
 }
