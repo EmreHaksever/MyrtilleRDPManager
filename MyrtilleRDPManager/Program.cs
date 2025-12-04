@@ -1,13 +1,27 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using MyrtilleRDPManager.Data;
+using Microsoft.EntityFrameworkCore; // SQL Server için gerekli
+using MyrtilleRDPManager.Data;       // DatabaseModels ve AppDbContext için
+using MyrtilleRDPManager.Services;   // EncryptionService için
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
-builder.Services.AddSingleton<WeatherForecastService>();
+
+// --- BÝZÝM EKLEDÝÐÝMÝZ SERVÝSLER ---
+
+// 1. Encryption (Þifreleme) Servisi
+// Uygulama boyunca tek bir instance yeterli (Singleton)
+builder.Services.AddSingleton<EncryptionService>();
+
+// 2. Veritabaný Baðlantýsý (SQL Server)
+// appsettings.json dosyasýndaki "DefaultConnection" ismini kullanýr
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// -----------------------------------
 
 var app = builder.Build();
 
